@@ -1,0 +1,660 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>The Young Boy</title>
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style>
+</head><body><canvas id="out" width="1920" height="1080"></canvas>
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// "The Young Boy" — a shadow-theatre film about Nedunchezhiyan of the Pandyas.
+// Rendering model (after the Lemo-Opuscar Shadow Puppetry style prompt):
+//   image = lampLight × cloth × hideTransmission, then warm bloom, vignette, grain.
+// Every puppet piece is a dyed, textured, carved sprite drawn with `multiply`
+// onto a white transmission canvas, so holes glow and overlaps darken.
+// window.drawFrame(t) renders one frame deterministically.
+// ─────────────────────────────────────────────────────────────────────────────
+const W = 1920, H = 1080, TL = window.TL;
+const INK = '#2a140a';
+const DYE = { verm: '#c3361c', ochre: '#d9962a', gold: '#e2b23a', jade: '#2e8a5c',
+  indigo: '#33479a', plum: '#7d2a5c', hide: '#dcb878', rust: '#a5461f', teal: '#1f7a7a',
+  dark: '#3b2215', olive: '#7a8a2a' };
+
+const out = document.getElementById('out'), O = out.getContext('2d');
+const mk = (w, h) => { const c = document.createElement('canvas'); c.width = Math.ceil(w); c.height = Math.ceil(h); return c; };
+const trans = mk(W, H), T = trans.getContext('2d');
+const light = mk(W, H), L = light.getContext('2d');
+const small = mk(W / 6, H / 6), S = small.getContext('2d');
+
+// ── deterministic helpers ────────────────────────────────────────────────────
+function rng(seed) { let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const hash = (i, s) => { const r = Math.sin(i * 127.1 + s * 311.7) * 43758.5453; return r - Math.floor(r); };
+function noise1(t, s) { const i = Math.floor(t), f = t - i, u = f * f * (3 - 2 * f); return hash(i, s) * (1 - u) + hash(i + 1, s) * u; }
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = k => { k = clamp(k); return k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; };
+const easeOut = k => 1 - Math.pow(1 - clamp(k), 3);
+const win = (t, a, b) => clamp((t - a) / (b - a));
+const pulse = (t, at, len) => (t >= at && t < at + len) ? 1 - (t - at) / len : 0;
+
+// ── textures: cloth, hide, grain ─────────────────────────────────────────────
+function makeCloth() {
+  const s = 1024, c = mk(s, s), g = c.getContext('2d'), im = g.createImageData(s, s), r = rng(7);
+  for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+    const w = 0.5 + 0.5 * Math.sin(x * 2.1 + 3 * Math.sin(y * .013)) * Math.sin(y * 2.1 + 3 * Math.sin(x * .011));
+    const bl = noise1(x / 90 + 10 * noise1(y / 200, 3), 1) * noise1(y / 110, 2);
+    const v = 0.90 + 0.05 * w - 0.07 * bl + (r() - .5) * 0.05 - (r() < .004 ? .15 : 0);
+    const i = (y * s + x) * 4;
+    im.data[i] = 248 * v; im.data[i + 1] = 236 * v; im.data[i + 2] = 212 * v; im.data[i + 3] = 255;
+  }
+  g.putImageData(im, 0, 0); return c;
+}
+function makeHide() {
+  const s = 512, c = mk(s, s), g = c.getContext('2d'), im = g.createImageData(s, s), r = rng(11);
+  for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+    const m = noise1(x / 40 + noise1(y / 60, 5) * 4, 4) * .6 + noise1(y / 25 + x / 70, 6) * .4;
+    const v = 0.80 + 0.2 * m + (r() - .5) * .06;
+    const i = (y * s + x) * 4;
+    im.data[i] = 255 * v; im.data[i + 1] = 240 * v; im.data[i + 2] = 215 * v; im.data[i + 3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  g.strokeStyle = 'rgba(120,70,30,0.10)'; g.lineWidth = 1;
+  for (let k = 0; k < 400; k++) { g.beginPath(); const x = r() * s, y = r() * s, a = r() * 6.28, l = 6 + r() * 30; g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); }
+  return c;
+}
+function makeGrain(seed) {
+  const w = 960, h = 540, c = mk(w, h), g = c.getContext('2d'), im = g.createImageData(w, h), r = rng(seed);
+  for (let i = 0; i < w * h; i++) { const v = 128 + (r() - .5) * 90; im.data[i * 4] = im.data[i * 4 + 1] = im.data[i * 4 + 2] = v; im.data[i * 4 + 3] = 255; }
+  g.putImageData(im, 0, 0); return c;
+}
+const CLOTH = makeCloth(), HIDE = makeHide();
+const GRAIN = [1, 2, 3, 4].map(makeGrain);
+const clothPat = O.createPattern(CLOTH, 'repeat');
+
+// ── carved piece builder ─────────────────────────────────────────────────────
+// shape(g): adds the outline path. carve(): returns Path2Ds to cut (holes glow).
+// deco(g): extra dye painted inside the hide (source-atop) before cutting.
+let pieceSeed = 1;
+function piece(w, h, px, py, shape, dye, carve, deco) {
+  const c = mk(w, h), g = c.getContext('2d'), r = rng(pieceSeed++);
+  g.translate(px, py);
+  g.beginPath(); shape(g); g.fillStyle = dye; g.fill();
+  if (deco) { g.save(); g.globalCompositeOperation = 'source-atop'; deco(g); g.restore(); }
+  const m = mk(w, h); m.getContext('2d').drawImage(c, 0, 0);
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = 'multiply';
+  const ox = r() * 256, oy = r() * 256;
+  for (let y = -oy; y < h; y += 512) for (let x = -ox; x < w; x += 512) g.drawImage(HIDE, x, y);
+  g.globalCompositeOperation = 'destination-in'; g.drawImage(m, 0, 0);
+  g.restore();
+  g.save(); g.globalCompositeOperation = 'source-atop';
+  g.beginPath(); shape(g); g.lineWidth = 5; g.strokeStyle = INK; g.lineJoin = 'round'; g.stroke();
+  g.restore();
+  if (carve) {
+    const holes = carve();
+    g.save(); g.globalCompositeOperation = 'source-atop'; g.strokeStyle = INK; g.lineWidth = 3.6;
+    holes.forEach(p => g.stroke(p)); g.restore();
+    g.save(); g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000';
+    holes.forEach(p => g.fill(p)); g.restore();
+  }
+  return { c, px, py };
+}
+function drawPiece(ctx, sp, x, y, ang = 0, sx = 1, sy = 1) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang); ctx.scale(sx, sy);
+  ctx.drawImage(sp.c, -sp.px, -sp.py); ctx.restore();
+}
+// carve vocabulary
+const P = () => new Path2D();
+function circ(x, y, r) { const p = P(); p.arc(x, y, r, 0, 6.2832); return p; }
+function crescents(x0, y0, x1, y1, n, r) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const k = (i + .5) / n, x = lerp(x0, x1, k), y = lerp(y0, y1, k), p = P();
+    p.arc(x, y, r, 0.15 * Math.PI, 0.85 * Math.PI); p.arc(x, y - r * .45, r * .78, 0.8 * Math.PI, 0.2 * Math.PI, true); p.closePath(); out.push(p);
+  } return out;
+}
+function diamonds(x0, y0, w, h, cell) {
+  const out = [];
+  for (let y = y0 + cell / 2; y < y0 + h; y += cell) for (let x = x0 + cell / 2; x < x0 + w; x += cell) {
+    const p = P(), d = cell * .36; p.moveTo(x, y - d); p.lineTo(x + d, y); p.lineTo(x, y + d); p.lineTo(x - d, y); p.closePath(); out.push(p);
+  } return out;
+}
+function coins(x0, y0, x1, y1, n, r) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const k = (i + .5) / n, x = lerp(x0, x1, k), y = lerp(y0, y1, k), p = P();
+    p.arc(x, y, r, 0, 6.2832); p.rect(x - r * .4, y - r * .4, r * .8, r * .8); out.push(p);
+  } return out;
+}
+function slits(x0, y0, x1, y1, n, len, w, ang = -1.57) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const k = (i + .5) / n, x = lerp(x0, x1, k), y = lerp(y0, y1, k), p = P();
+    const dx = Math.cos(ang), dy = Math.sin(ang), nx = -dy, ny = dx;
+    p.moveTo(x, y); p.lineTo(x + dx * len * .5 + nx * w, y + dy * len * .5 + ny * w); p.lineTo(x + dx * len, y + dy * len);
+    p.lineTo(x + dx * len * .5 - nx * w, y + dy * len * .5 - ny * w); p.closePath(); out.push(p);
+  } return out;
+}
+
+// ── puppet figures ───────────────────────────────────────────────────────────
+// Local coords: feet at (0,0), facing +x, y up is negative.
+function makeFigure(o) {
+  const F = { o };
+  // dhoti (pivot waist)
+  F.dhoti = piece(140, 130, 70, 8, g => { g.moveTo(-30, 0); g.lineTo(28, 0); g.lineTo(44, 92); g.quadraticCurveTo(4, 102, -44, 92); g.closePath(); },
+    o.dhoti, () => [...diamonds(-34, 62, 70, 26, 13), ...slits(-14, 8, 18, 8, 3, 46, 3.5, 1.45)],
+    g => { g.fillStyle = o.border; g.fillRect(-60, 58, 120, 40); });
+  // shins with feet (pivot knee)
+  F.shin = piece(70, 110, 22, 6, g => { g.moveTo(-9, 0); g.lineTo(9, 0); g.lineTo(8, 64); g.lineTo(30, 74); g.lineTo(28, 82); g.lineTo(-10, 82); g.closePath(); },
+    o.skin, () => [circ(0, 4, 3.5), ...crescents(-6, 66, 8, 66, 2, 5)]);
+  // torso (pivot waist)
+  F.torso = piece(120, 170, 60, 155, g => { g.moveTo(-28, 0); g.lineTo(-32, -118); g.quadraticCurveTo(-10, -138, 22, -128); g.quadraticCurveTo(36, -95, 30, -60); g.quadraticCurveTo(22, -20, 27, 0); g.closePath(); },
+    o.torso, () => [...crescents(-18, -100, 22, -96, 5, 8), ...diamonds(-24, -62, 48, 40, 14), ...coins(-20, -12, 20, -12, 3, 6)],
+    g => { g.fillStyle = o.belt; g.fillRect(-60, -14, 120, 14); });
+  // head + crown (pivot neck)
+  const open = o.openFace;
+  const face = g => {
+    g.moveTo(-18, 2); g.quadraticCurveTo(-40, -30, -34, -70); g.quadraticCurveTo(-24, -104, 4, -106); g.quadraticCurveTo(30, -102, 34, -78);
+    g.lineTo(38, -64); g.lineTo(52, -50); g.lineTo(40, -44); g.lineTo(42, -36); g.lineTo(35, -32); g.lineTo(39, -27);
+    if (o.beard) { g.quadraticCurveTo(46, -10, 30, 6); g.quadraticCurveTo(6, 14, -6, -4); }
+    else { g.quadraticCurveTo(34, -12, 16, -8); g.lineTo(14, 4); }
+    g.closePath();
+  };
+  F.head = piece(140, 150, 60, 120, face, o.skin, () => {
+    const h = [];
+    if (open) { const p = P(); p.moveTo(-4, -92); p.quadraticCurveTo(24, -92, 27, -72); p.lineTo(30, -62); p.lineTo(38, -52); p.lineTo(28, -46);
+      p.quadraticCurveTo(26, -22, 10, -16); p.quadraticCurveTo(-8, -28, -6, -60); p.closePath(); h.push(p); }
+    const eye = P(); eye.ellipse(18, -66, open ? 3 : 7, open ? 3 : 3.2, 0, 0, 6.28); if (!open) h.push(eye);
+    h.push(circ(-14, -40, 7)); // ear hole
+    if (o.beard) h.push(...slits(10, -6, 32, -10, 4, 18, 2.5, 1.9));
+    return h;
+  }, g => { g.fillStyle = INK; g.beginPath(); g.moveTo(-36, -60); g.quadraticCurveTo(-46, -20, -22, 6); g.lineTo(-14, -30); g.closePath(); g.fill();
+            if (o.beard) { g.fillStyle = INK; g.fillRect(0, -26, 60, 40); } });
+  if (open) { // eye + brow strips on the open face
+    const eye = piece(60, 40, 30, 20, g => { g.ellipse(0, 0, 9, 3.6, -0.05, 0, 6.28); g.moveTo(-10, -9); g.quadraticCurveTo(2, -16, 12, -8); g.lineTo(11, -6); g.quadraticCurveTo(2, -12, -10, -6); g.closePath(); }, INK);
+    F.eye = eye;
+  }
+  F.crown = o.crown === 'kireedam'
+    ? piece(150, 150, 75, 130, g => { g.moveTo(-46, 6); g.lineTo(44, 6); g.lineTo(40, -18); g.lineTo(32, -22); g.lineTo(30, -50); g.lineTo(22, -54); g.lineTo(18, -82); g.lineTo(10, -86);
+        g.quadraticCurveTo(6, -112, 0, -118); g.quadraticCurveTo(-6, -112, -10, -86); g.lineTo(-18, -82); g.lineTo(-22, -54); g.lineTo(-30, -50); g.lineTo(-32, -22); g.lineTo(-42, -18); g.closePath();
+        g.moveTo(40, -18); g.quadraticCurveTo(70, -40, 60, -70); g.quadraticCurveTo(52, -40, 32, -30); g.closePath(); g.moveTo(-42, -18); g.quadraticCurveTo(-72, -40, -62, -70); g.quadraticCurveTo(-54, -40, -32, -30); g.closePath(); },
+      o.crownDye, () => [...crescents(-36, -2, 36, -2, 7, 6), ...coins(-22, -36, 22, -36, 3, 7), ...diamonds(-14, -78, 28, 22, 11), circ(0, -102, 4)])
+    : o.crown === 'tall'
+    ? piece(130, 150, 65, 130, g => { g.moveTo(-40, 0); g.lineTo(38, 0); g.lineTo(30, -70); g.quadraticCurveTo(0, -120, -30, -70); g.closePath(); },
+      o.crownDye, () => [...crescents(-30, -12, 30, -12, 6, 7), ...crescents(-22, -40, 22, -40, 4, 7), ...diamonds(-10, -78, 20, 20, 10)])
+    : piece(110, 80, 55, 64, g => { g.moveTo(-38, 0); g.quadraticCurveTo(-46, -46, 0, -52); g.quadraticCurveTo(44, -48, 36, 0); g.closePath(); },
+      o.crownDye, () => [...slits(-26, -8, 26, -8, 5, 28, 3.5, -1.57)]);
+  // arms (pivot shoulder) and forearms (pivot elbow)
+  F.upper = piece(60, 90, 30, 14, g => { g.ellipse(0, 0, 14, 14, 0, 0, 6.28); g.moveTo(-13, 0); g.lineTo(13, 0); g.lineTo(10, 60); g.lineTo(-10, 60); g.closePath(); },
+    o.sleeve, () => [circ(0, 0, 4), ...crescents(-6, 26, 6, 26, 2, 6), ...crescents(-6, 46, 6, 46, 2, 6)]);
+  F.fore = piece(50, 90, 25, 10, g => { g.ellipse(0, 0, 11, 11, 0, 0, 6.28); g.moveTo(-10, 0); g.lineTo(10, 0); g.lineTo(8, 52); g.ellipse(0, 58, 10, 9, 0, 0, 6.28); g.lineTo(-8, 52); g.closePath(); },
+    o.skin, () => [circ(0, 0, 3.4), ...coins(0, 40, 0, 40, 1, 5)]);
+  if (o.held === 'sword') F.held = piece(40, 230, 20, 210, g => { g.moveTo(-14, 6); g.lineTo(14, 6); g.lineTo(14, -6); g.lineTo(5, -8); g.lineTo(6, -180); g.lineTo(0, -205); g.lineTo(-6, -180); g.lineTo(-5, -8); g.lineTo(-14, -6); g.closePath(); },
+    DYE.dark, () => [...slits(0, -20, 0, -20, 1, 150, 1.6, -1.57)]);
+  if (o.held === 'spear') F.held = piece(40, 330, 20, 220, g => { g.moveTo(-3, 100); g.lineTo(3, 100); g.lineTo(3, -180); g.lineTo(10, -186); g.lineTo(0, -214); g.lineTo(-10, -186); g.lineTo(-3, -180); g.closePath(); },
+    DYE.dark, () => [circ(0, -192, 3)]);
+  if (o.held === 'scepter') F.held = piece(40, 200, 20, 150, g => { g.moveTo(-3, 40); g.lineTo(3, 40); g.lineTo(3, -120); g.arc(0, -130, 12, 0.3, 2.84 + 6.28 - 6.28, true); g.lineTo(-3, -120); g.closePath(); },
+    o.crownDye, () => [circ(0, -130, 5)]);
+  return F;
+}
+// pose: {x,y,s,dir,tilt,head,aF,eF,aB,eB,walk,blur,alpha,seed,tremor}
+function drawFigure(ctx, F, p, t) {
+  const tr = (p.tremor ?? 1), sd = p.seed || 1;
+  const jx = (noise1(t * 1.3, sd) - .5) * 5 * tr, jy = (noise1(t * 1.1, sd + 9) - .5) * 4 * tr, ja = (noise1(t * 1.7, sd + 4) - .5) * 0.04 * tr;
+  ctx.save();
+  if (p.blur) ctx.filter = `blur(${p.blur}px)`;
+  ctx.globalAlpha = p.alpha ?? 1;
+  ctx.translate(p.x + jx, p.y + jy); ctx.scale(p.s * p.dir, p.s);
+  const walk = p.walk || 0, sw = Math.sin(walk) * 0.42;
+  const waistY = -158 - Math.abs(Math.cos(walk)) * 6 * (p.walkAmp ?? 0);
+  // back leg, front leg
+  const knee = (ang) => { // knee position from waist following dhoti swing
+    return [Math.sin(ang) * 80, waistY + Math.cos(ang) * 80];
+  };
+  const legA = (p.walkAmp ?? 0) * sw, legB = -(p.walkAmp ?? 0) * sw;
+  let k = knee(legB); drawPiece(ctx, F.shin, k[0] - 10, k[1], legB * .6 + (p.kneelB || 0));
+  k = knee(legA); drawPiece(ctx, F.shin, k[0] + 10, k[1], legA * .6);
+  drawPiece(ctx, F.dhoti, 0, waistY, (legA + legB) * .1);
+  // torso
+  const tilt = (p.tilt || 0) + ja;
+  ctx.save(); ctx.translate(0, waistY); ctx.rotate(tilt);
+  const sh = [-4, -118];
+  const arm = (a, e, front) => {
+    ctx.save(); ctx.translate(sh[0], sh[1]); ctx.rotate(a); drawPiece(ctx, F.upper, 0, 0);
+    ctx.translate(0, 60); ctx.rotate(e); drawPiece(ctx, F.fore, 0, 0);
+    if (front && F.held) { ctx.translate(0, 58); ctx.rotate(-(a + e) + (p.heldAng || 0)); drawPiece(ctx, F.held, 0, 0); }
+    ctx.restore();
+  };
+  arm(p.aB ?? 0.25, p.eB ?? -0.3, false);
+  drawPiece(ctx, F.torso, 0, 0);
+  ctx.save(); ctx.translate(6, -128); ctx.rotate(p.head || 0);
+  drawPiece(ctx, F.head, 0, 0);
+  if (F.eye) drawPiece(ctx, F.eye, 18, -66);
+  drawPiece(ctx, F.crown, 0, -98);
+  ctx.restore();
+  arm(p.aF ?? -0.3, p.eF ?? -0.6, true);
+  ctx.restore();
+  ctx.restore();
+}
+// rods: thin dark lines from the hand/neck going down off the screen
+function rods(ctx, x, y, s, dir, t, n = 2, seed = 1) {
+  ctx.save(); ctx.strokeStyle = 'rgba(70,45,25,0.55)'; ctx.lineWidth = 3; ctx.filter = 'blur(1.5px)';
+  for (let i = 0; i < n; i++) {
+    const ax = x + dir * s * (i ? 40 : -10), ay = y - s * (i ? 260 : 300);
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + dir * (60 + i * 50) + (noise1(t, seed + i) - .5) * 10, 1300); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ── banners & emblems ────────────────────────────────────────────────────────
+function makeFlag(kind, dye) {
+  const w = 190, h = 130;
+  return piece(w + 20, h + 20, 6, 10, g => {
+    if (kind === 'pennant') { g.moveTo(0, 0); g.lineTo(w, h * .35); g.lineTo(0, h * .75); g.closePath(); }
+    else { g.moveTo(0, 0); g.lineTo(w, 0); g.lineTo(w - 22, h / 2); g.lineTo(w, h); g.lineTo(0, h); g.closePath(); }
+  }, dye, () => {
+    const hs = [];
+    if (kind === 'fish') { // the twin fish of the Pandyas
+      for (const [cx, sgn] of [[54, 1], [126, -1]]) {
+        const p = P(); p.moveTo(cx - 34 * sgn, 65); p.quadraticCurveTo(cx, 30, cx + 30 * sgn, 62); p.lineTo(cx + 44 * sgn, 46); p.lineTo(cx + 40 * sgn, 66);
+        p.lineTo(cx + 44 * sgn, 86); p.lineTo(cx + 30 * sgn, 70); p.quadraticCurveTo(cx, 100, cx - 34 * sgn, 65); p.closePath(); hs.push(p);
+      }
+      hs.push(...coins(20, 116, 150, 116, 6, 5));
+    } else if (kind === 'bow') { // the bow of the Cheras
+      const p = P(); p.moveTo(52, 18); p.quadraticCurveTo(150, 65, 52, 112); p.lineTo(60, 108); p.quadraticCurveTo(136, 65, 60, 22); p.closePath(); hs.push(p);
+      const s = P(); s.rect(53, 22, 4, 88); hs.push(s);
+      const a = P(); a.moveTo(30, 63); a.lineTo(140, 63); a.lineTo(140, 58); a.lineTo(156, 65); a.lineTo(140, 72); a.lineTo(140, 67); a.lineTo(30, 67); a.closePath(); hs.push(a);
+    } else if (kind === 'tiger') { // the tiger of the Cholas
+      const p = P(); p.moveTo(30, 90); p.quadraticCurveTo(40, 52, 80, 56); p.quadraticCurveTo(110, 60, 128, 46); p.lineTo(134, 34); p.lineTo(140, 44);
+      p.quadraticCurveTo(160, 46, 158, 62); p.lineTo(150, 74); p.quadraticCurveTo(140, 80, 130, 76); p.lineTo(134, 100); p.lineTo(122, 100); p.lineTo(116, 80);
+      p.quadraticCurveTo(84, 86, 62, 82); p.lineTo(58, 102); p.lineTo(46, 102); p.lineTo(46, 88); p.quadraticCurveTo(26, 74, 14, 40); p.lineTo(20, 38); p.quadraticCurveTo(28, 70, 30, 90); p.closePath(); hs.push(p);
+      hs.push(...coins(20, 116, 150, 116, 6, 4));
+    } else hs.push(...diamonds(10, h * .28, w * .55, h * .3, 18));
+    return hs;
+  }, kind === 'tiger' ? g => { g.strokeStyle = INK; g.lineWidth = 5; for (let x = 60; x < 125; x += 14) { g.beginPath(); g.moveTo(x, 54); g.lineTo(x + 6, 82); g.stroke(); } } : null);
+}
+function drawBanner(ctx, flag, x, y, t, o = {}) {
+  const sway = Math.sin(t * 2.1 + (o.seed || 0)) * 0.06 + (noise1(t * 1.4, o.seed || 3) - .5) * .05;
+  ctx.save(); if (o.blur) ctx.filter = `blur(${o.blur}px)`; ctx.globalAlpha = o.alpha ?? 1;
+  ctx.translate(x, y); ctx.rotate(o.rot || 0); const s = o.s || 1; ctx.scale(s * (o.dir || 1), s);
+  ctx.fillStyle = INK; ctx.fillRect(-4, -420, 8, 520);
+  ctx.beginPath(); ctx.arc(0, -428, 10, 0, 6.28); ctx.fill();
+  drawPiece(ctx, flag, 4, -414, sway);
+  ctx.restore();
+}
+
+// ── scenery ──────────────────────────────────────────────────────────────────
+const SC = {};
+function buildScenery() {
+  // Madurai temple tower (gopuram): tiers of carved arches
+  SC.gopuram = piece(460, 700, 230, 690, g => {
+    const tiers = 6; let w = 200, y = 0;
+    g.moveTo(-w, 0);
+    for (let i = 0; i < tiers; i++) { const nw = w - 26; g.lineTo(-w, y - 70); g.lineTo(-nw, y - 70); w = nw; y -= 70; }
+    g.lineTo(-w, y - 40); g.quadraticCurveTo(0, y - 110, w, y - 40);
+    for (let i = tiers - 1; i >= 0; i--) { const nw = w + 26; g.lineTo(w, y); g.lineTo(nw, y); w = nw; y += 70; }
+    g.lineTo(w, 0); g.closePath();
+  }, DYE.ochre, () => {
+    const h = []; let w = 200, y = 0;
+    for (let i = 0; i < 6; i++) {
+      const n = Math.max(2, Math.round(w / 34));
+      for (let j = 0; j < n; j++) { const x = -w + 24 + (2 * w - 48) * (j + .5) / n, p = P(); p.moveTo(x - 9, y - 12); p.lineTo(x - 9, y - 42); p.arc(x, y - 42, 9, Math.PI, 0); p.lineTo(x + 9, y - 12); p.closePath(); h.push(p); }
+      h.push(...crescents(-w + 10, y - 60, w - 10, y - 60, n * 2, 5));
+      w -= 26; y -= 70;
+    }
+    h.push(...coins(-60, y - 50, 60, y - 50, 5, 7));
+    const door = P(); door.moveTo(-40, 0); door.lineTo(-40, -90); door.quadraticCurveTo(0, -130, 40, -90); door.lineTo(40, 0); door.closePath(); h.push(door);
+    return h;
+  }, g => { g.fillStyle = DYE.verm; for (let y = -70; y > -420; y -= 140) g.fillRect(-300, y - 70, 600, 70); });
+  // pillared hall
+  SC.hall = piece(620, 340, 310, 330, g => { g.moveTo(-300, 0); g.lineTo(-300, -250); g.lineTo(-320, -250); g.lineTo(0, -320); g.lineTo(320, -250); g.lineTo(300, -250); g.lineTo(300, 0); g.closePath(); },
+    DYE.hide, () => { const h = []; for (let i = 0; i < 6; i++) { const x = -250 + i * 100, p = P(); p.moveTo(x, 0); p.lineTo(x, -190); p.quadraticCurveTo(x + 35, -235, x + 70, -190); p.lineTo(x + 70, 0); p.closePath(); h.push(p); }
+      h.push(...crescents(-260, -230, 260, -230, 14, 8), ...diamonds(-120, -300, 240, 40, 16)); return h; },
+    g => { g.fillStyle = DYE.jade; g.fillRect(-330, -260, 660, 40); });
+  // palm tree
+  SC.palm = piece(380, 640, 190, 630, g => {
+    g.moveTo(-10, 0); g.quadraticCurveTo(-24, -260, 6, -500); g.lineTo(20, -500); g.quadraticCurveTo(0, -260, 14, 0); g.closePath();
+    for (let i = 0; i < 7; i++) { const a = -Math.PI + 0.25 + i * (Math.PI - .5) / 6, l = 170;
+      g.moveTo(12, -500); g.quadraticCurveTo(12 + Math.cos(a) * l * .6, -500 + Math.sin(a) * l * .6 - 40, 12 + Math.cos(a) * l, -500 + Math.sin(a) * l * .5 + 50);
+      g.quadraticCurveTo(12 + Math.cos(a) * l * .5, -500 + Math.sin(a) * l * .4 - 10, 12, -490); }
+  }, DYE.jade, () => [...slits(2, -40, 8, -460, 11, 14, 3, 0), circ(14, -500, 10)]);
+  // ground strips
+  SC.ground = piece(1300, 220, 0, 20, g => { g.moveTo(0, 0); for (let x = 0; x <= 1280; x += 80) g.quadraticCurveTo(x + 40, -14, x + 80, 0); g.lineTo(1280, 200); g.lineTo(0, 200); g.closePath(); },
+    DYE.rust, () => [...crescents(20, 50, 1260, 50, 30, 14), ...diamonds(0, 90, 1280, 60, 26), ...slits(10, 4, 1270, 4, 40, 22, 3)]);
+  SC.groundB = piece(1300, 220, 0, 20, g => { g.moveTo(0, 0); for (let x = 0; x <= 1280; x += 160) g.quadraticCurveTo(x + 80, -24, x + 160, 0); g.lineTo(1280, 200); g.lineTo(0, 200); g.closePath(); },
+    DYE.olive, () => [...slits(8, 6, 1272, 6, 64, 30, 3.5), ...crescents(30, 70, 1250, 70, 24, 16), ...coins(40, 140, 1240, 140, 16, 9)]);
+  // hills (strata along a ridge)
+  SC.hills = piece(1500, 420, 0, 400, g => { g.moveTo(0, 0); g.quadraticCurveTo(200, -320, 480, -200); g.quadraticCurveTo(700, -380, 1000, -180); g.quadraticCurveTo(1250, -300, 1480, -120); g.lineTo(1480, 0); g.closePath(); },
+    DYE.indigo, () => { const h = []; for (let k = 1; k < 4; k++) h.push(...slits(120, -230 + k * 60, 1380, -150 + k * 40, 26, 34, 3, 0.05)); return h; });
+  // fort walls for the rival kings
+  SC.fort = piece(760, 360, 380, 350, g => { g.moveTo(-370, 0); g.lineTo(-370, -230);
+    for (let x = -370; x < 370; x += 60) { g.lineTo(x, -260); g.lineTo(x + 30, -260); g.lineTo(x + 30, -230); g.lineTo(x + 60, -230); }
+    g.lineTo(370, 0); g.closePath(); },
+    DYE.plum, () => [...diamonds(-350, -200, 700, 80, 22), ...crescents(-340, -90, 340, -90, 16, 14), ...coins(-300, -40, 300, -40, 9, 9)]);
+  // flame tongues (three swapped variants)
+  SC.fire = [0, 1, 2].map(v => piece(220, 260, 110, 250, g => {
+    const r = rng(40 + v);
+    g.moveTo(-90, 0);
+    for (let i = 0; i < 5; i++) { const x = -90 + i * 40, hh = 120 + r() * 110, c = (i % 2 ? 1 : -1) * 14;
+      g.quadraticCurveTo(x + 5, -hh * .5, x + 20 + c, -hh); g.quadraticCurveTo(x + 30, -hh * .45, x + 40, 0); }
+    g.closePath();
+  }, DYE.verm, () => [...slits(-70, -20, 70, -20, 5, 70, 5)], g => { g.fillStyle = DYE.gold; g.fillRect(-120, -60, 240, 60); }));
+}
+
+// ── plaques: dark hide with letters cut out (they glow) ──────────────────────
+function plaque(lines, w, h, sizes) {
+  return piece(w + 20, h + 20, (w + 20) / 2, (h + 20) / 2, g => { g.rect(-w / 2, -h / 2, w, h); }, DYE.dark, () => {
+    const hs = [];
+    const b = P(); b.rect(-w / 2 + 14, -h / 2 + 14, w - 28, 5); b.rect(-w / 2 + 14, h / 2 - 19, w - 28, 5); hs.push(b);
+    hs.push(...coins(-w / 2 + 30, 0, -w / 2 + 30, 0, 1, 10), ...coins(w / 2 - 30, 0, w / 2 - 30, 0, 1, 10));
+    return hs;
+  }, null);
+}
+function cutText(sp, lines, sizes, spacing = 1.18) {
+  const g = sp.c.getContext('2d');
+  g.save(); g.setTransform(1, 0, 0, 1, sp.px, sp.py); g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  let tot = sizes.reduce((a, s) => a + s * spacing, 0), y = -tot / 2;
+  lines.forEach((ln, i) => { g.font = `${i === 0 ? 'bold ' : ''}${sizes[i]}px "FreeSerif","Liberation Serif",serif`; if (g.letterSpacing !== undefined) g.letterSpacing = (i === 0 ? sizes[i] * .12 : 2) + 'px';
+    g.fillText(ln, 0, y + sizes[i] * spacing / 2); y += sizes[i] * spacing; });
+  g.restore(); return sp;
+}
+// press on / lift off: s grows and blur rises outside [a,b]
+function pressLift(t, a, b, inDur = .5, outDur = .9) {
+  if (t < a || t > b + outDur) return null;
+  if (t < a + inDur) { const k = easeOut((t - a) / inDur); return { s: lerp(1.35, 1, k), blur: lerp(16, 0, k), alpha: k }; }
+  if (t > b) { const k = (t - b) / outDur; return { s: lerp(1, 1.4, k), blur: lerp(0, 20, k), alpha: 1 - k, lift: k }; }
+  return { s: 1, blur: 0, alpha: 1 };
+}
+
+// ── cast ─────────────────────────────────────────────────────────────────────
+let BOY, CHERA, CHOLA, SOLDIER, FOE, FLAGS, TITLE, PLACE, END;
+function buildCast() {
+  BOY = makeFigure({ torso: DYE.verm, sleeve: DYE.gold, dhoti: DYE.jade, border: DYE.gold, belt: DYE.gold, skin: DYE.hide, crown: 'kireedam', crownDye: DYE.gold, openFace: true, held: 'sword' });
+  CHERA = makeFigure({ torso: DYE.indigo, sleeve: DYE.teal, dhoti: DYE.plum, border: DYE.indigo, belt: DYE.ochre, skin: '#b88a55', crown: 'tall', crownDye: DYE.ochre, beard: true, held: 'scepter' });
+  CHOLA = makeFigure({ torso: DYE.plum, sleeve: DYE.verm, dhoti: DYE.indigo, border: DYE.ochre, belt: DYE.gold, skin: '#b88a55', crown: 'tall', crownDye: DYE.gold, beard: true, held: 'scepter' });
+  SOLDIER = makeFigure({ torso: DYE.ochre, sleeve: DYE.verm, dhoti: DYE.jade, border: DYE.verm, belt: DYE.verm, skin: DYE.hide, crown: 'turban', crownDye: DYE.verm, openFace: true, held: 'spear' });
+  FOE = makeFigure({ torso: DYE.indigo, sleeve: DYE.plum, dhoti: DYE.teal, border: DYE.plum, belt: DYE.ochre, skin: '#b88a55', crown: 'turban', crownDye: DYE.plum, beard: true, held: 'spear' });
+  FLAGS = { fish: makeFlag('fish', DYE.ochre), bow: makeFlag('bow', DYE.teal), tiger: makeFlag('tiger', DYE.verm),
+    chiefs: [DYE.plum, DYE.olive, DYE.indigo, DYE.rust, DYE.teal].map(d => makeFlag('pennant', d)) };
+  TITLE = cutText(plaque(null, 1180, 300), ['THE YOUNG BOY', 'Nedunchezhiyan of the Pandyas'], [96, 46]);
+  PLACE = cutText(plaque(null, 1060, 170), ['THALAIYALANGANAM'], [66]);
+  END = cutText(plaque(null, 1120, 300), ['THALAIYALANGANAM', 'present-day Tiruvarur district, Tamil Nadu', 'Sangam age · c. 2nd century CE'], [70, 40, 34]);
+}
+
+// ── camera ───────────────────────────────────────────────────────────────────
+// keyframes per scene: [t, x, y, zoom]
+const CAM1 = [[0, 960, 560, .80], [4.6, 960, 560, .80], [6.4, 980, 540, 1.0], [11.4, 1000, 540, 1.0], [12.4, 1110, 560, 1.32], [16.2, 1120, 560, 1.34],
+  [17.8, 2950, 540, 1.0], [21.4, 2950, 540, .98], [27.3, 2950, 540, .98], [29.0, 2950, 540, .98], [29.6, 1120, 560, 1.18], [32.4, 1120, 540, 1.22], [35.6, 1120, 520, 1.3]];
+const CAM2 = [[35.6, 900, 540, 1.0], [40.0, 1900, 540, 1.0], [40.3, 2350, 540, .9], [45.4, 2550, 540, .9], [46.0, 2620, 540, 1.05], [50.0, 2620, 520, 1.12], [52.0, 2680, 520, .95], [55, 2700, 540, .88]];
+function camAt(keys, t) {
+  if (t <= keys[0][0]) return keys[0].slice(1);
+  for (let i = 0; i < keys.length - 1; i++) { const a = keys[i], b = keys[i + 1];
+    if (t <= b[0]) { const k = ease((t - a[0]) / (b[0] - a[0])); return [lerp(a[1], b[1], k), lerp(a[2], b[2], k), lerp(a[3], b[3], k)]; } }
+  return keys[keys.length - 1].slice(1);
+}
+function crash(t, at, amt = .18, len = .35) { const p = pulse(t, at, len); return p > 0 ? amt * Math.pow(p, 1.5) : 0; }
+
+// ── lamps ────────────────────────────────────────────────────────────────────
+function flick(t, s) { return 1 + (noise1(t * 7, s) - .5) * .07 + Math.sin(t * 23 + s) * .015; }
+function lampLevel(t, on, off = 99, flareAt = -1) {
+  if (t < on) return 0;
+  let v = Math.min(1, (t - on) / .25); v += pulse(t, on, .5) * .35;
+  if (flareAt > 0) v += pulse(t, flareAt, 1.2) * .7;
+  if (t > off) v *= Math.max(0, 1 - (t - off) / 1.2);
+  return v;
+}
+
+// ── the frame ────────────────────────────────────────────────────────────────
+function drawFrame(t) {
+  const scene = t < TL.flash ? 1 : 2;
+  let [cx, cy, z] = camAt(scene === 1 ? CAM1 : CAM2, t);
+  z *= 1 + crash(t, TL.title_on, .08) + crash(t, TL.banner_chera, .06) + crash(t, TL.banner_chola, .06) + crash(t, TL.join, .14) + crash(t, TL.flare, .22, .5)
+    + crash(t, TL.clash, .16) + TL.falls.reduce((a, f) => a + crash(t, f, .07), 0) + crash(t, TL.final_hit, .12);
+  // screen shake on big hits
+  const shake = (pulse(t, TL.clash, .5) + pulse(t, TL.final_hit, .5) + pulse(t, TL.join, .4)) * 9;
+  cx += (noise1(t * 30, 1) - .5) * shake; cy += (noise1(t * 30, 2) - .5) * shake;
+  const cam = c => c.setTransform(z, 0, 0, z, W / 2 - cx * z, H / 2 - cy * z);
+
+  // 1 ─ transmission
+  T.setTransform(1, 0, 0, 1, 0, 0); T.globalCompositeOperation = 'source-over'; T.filter = 'none'; T.globalAlpha = 1;
+  T.fillStyle = '#fff'; T.fillRect(0, 0, W, H);
+  cam(T); T.globalCompositeOperation = 'multiply';
+  const lamps = scene === 1 ? scene1(t) : scene2(t);
+
+  // 2 ─ lamp field (screen space)
+  L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'source-over';
+  L.fillStyle = 'rgb(16,8,3)'; L.fillRect(0, 0, W, H);
+  L.globalCompositeOperation = 'lighter';
+  const lit = lamps.reduce((a, l) => a + l.v, 0), expo = 1.05 / Math.sqrt(Math.max(1, lit));
+  for (const l of lamps) {
+    if (l.v <= 0) continue;
+    const sx = W / 2 + (l.x - cx) * z, sy = H / 2 + (l.y - cy) * z, f = flick(t, l.seed) * l.v * expo;
+    let g = L.createRadialGradient(sx, sy, 0, sx, sy, 1250 * z);
+    g.addColorStop(0, `rgba(255,178,92,${.95 * f})`); g.addColorStop(.55, `rgba(220,120,50,${.42 * f})`); g.addColorStop(1, 'rgba(120,50,15,0)');
+    L.fillStyle = g; L.fillRect(0, 0, W, H);
+    g = L.createRadialGradient(sx, sy, 0, sx, sy, 380 * z);
+    g.addColorStop(0, `rgba(255,232,170,${.55 * f})`); g.addColorStop(1, 'rgba(255,200,120,0)');
+    L.fillStyle = g; L.fillRect(0, 0, W, H);
+  }
+  // warm white flash at the scene change
+  const fl = Math.max(pulse(t, TL.flash - .15, .9) * (t >= TL.flash - .15 ? 1 : 0), 0);
+
+  // 3 ─ composite
+  O.setTransform(1, 0, 0, 1, 0, 0); O.globalCompositeOperation = 'source-over'; O.globalAlpha = 1; O.filter = 'none';
+  O.drawImage(light, 0, 0);
+  O.globalCompositeOperation = 'multiply';
+  O.save(); cam(O); O.fillStyle = clothPat; O.fillRect(-2000, -1000, 9000, 3200); O.restore();
+  O.drawImage(trans, 0, 0);
+  // stage frame (lacquered wood) around the cloth
+  O.globalCompositeOperation = 'source-over';
+  stageFrame(t, cam, scene);
+  // bloom
+  S.setTransform(1, 0, 0, 1, 0, 0); S.globalCompositeOperation = 'copy'; S.filter = 'blur(5px)'; S.drawImage(out, 0, 0, W / 6, H / 6); S.filter = 'none';
+  O.globalCompositeOperation = 'screen'; O.globalAlpha = .32; O.drawImage(small, 0, 0, W, H); O.globalAlpha = 1;
+  if (fl > 0) { O.globalCompositeOperation = 'screen'; O.fillStyle = `rgba(255,226,170,${fl})`; O.fillRect(0, 0, W, H); }
+  // warm vignette
+  O.globalCompositeOperation = 'multiply';
+  const v = O.createRadialGradient(W / 2, H / 2, H * .35, W / 2, H / 2, H * 1.05);
+  v.addColorStop(0, 'rgba(255,255,255,1)'); v.addColorStop(1, 'rgba(110,52,20,1)');
+  O.fillStyle = v; O.fillRect(0, 0, W, H);
+  // grain
+  O.globalCompositeOperation = 'overlay'; O.globalAlpha = .10; O.drawImage(GRAIN[Math.floor(t * 24) % 4], 0, 0, W, H); O.globalAlpha = 1;
+  O.globalCompositeOperation = 'source-over';
+  // final darkness
+  if (t > TL.dark) { O.fillStyle = `rgba(0,0,0,${clamp((t - TL.dark) / .6)})`; O.fillRect(0, 0, W, H); }
+  if (t < .5) { O.fillStyle = `rgba(0,0,0,${1 - t / .5})`; O.fillRect(0, 0, W, H); }
+  placard(t);
+}
+
+function stageFrame(t, cam, scene) {
+  // cloth bounds in world (scene 1 and 2 share the same frame height)
+  const x0 = -140, x1 = scene === 1 ? 4100 : 3800, y0 = -40, y1 = 1120;
+  O.save(); cam(O);
+  O.fillStyle = '#1c0d06';
+  O.beginPath(); O.rect(-4000, -3000, 12000, 7000); O.rect(x0, y0, x1 - x0, y1 - y0); O.fill('evenodd');
+  // carved lintel and pillars with warm spill on the inner edge
+  const lg = O.createLinearGradient(0, y0 - 90, 0, y0);
+  lg.addColorStop(0, '#2c140a'); lg.addColorStop(1, '#6b3216'); O.fillStyle = lg; O.fillRect(x0 - 120, y0 - 90, x1 - x0 + 240, 90);
+  O.fillStyle = '#c08a3a'; O.fillRect(x0 - 120, y0 - 14, x1 - x0 + 240, 5);
+  for (const [px, d] of [[x0 - 120, 1], [x1, -1]]) {
+    const pg = O.createLinearGradient(px, 0, px + 120, 0);
+    pg.addColorStop(d > 0 ? 0 : 1, '#2a1209'); pg.addColorStop(d > 0 ? 1 : 0, '#7a3c18'); O.fillStyle = pg; O.fillRect(px, y0 - 90, 120, y1 - y0 + 200);
+  }
+  O.restore();
+  // audience heads in the opening and closing wide shots
+  const aud = (1 - win(t, 4.6, 6.2)) * (scene === 1 ? 1 : 0) + (scene === 2 ? win(t, 51, 54) : 0);
+  if (aud > 0.01) {
+    O.save(); O.globalAlpha = aud; O.fillStyle = '#0d0603';
+    for (let i = 0; i < 14; i++) { const x = 60 + i * 140 + (i % 2) * 30, y = H - 30 + (i % 3) * 18; O.beginPath(); O.ellipse(x, y, 58, 74, 0, 0, 6.28); O.fill(); O.fillRect(x - 90, y + 40, 180, 120); }
+    O.restore();
+  }
+}
+
+// storyteller's placard (subtitles)
+let LINES = [];
+function placard(t) {
+  let cur = null;
+  for (const ln of LINES) { const hold = Math.max(1.8, ln.dur + .6); if (t >= ln.start - .1 && t < ln.start + hold) cur = { ...ln, k: (t - ln.start + .1), hold }; }
+  if (!cur) return;
+  const a = clamp(cur.k / .25) * clamp((cur.hold - cur.k + .1) / .3), slide = (1 - easeOut(cur.k / .3)) * 30;
+  O.save(); O.globalAlpha = a; O.font = '600 42px "FreeSerif","Liberation Serif",serif'; O.textAlign = 'center'; O.textBaseline = 'middle';
+  const words = cur.sub.split(' '), rows = []; let row = '';
+  for (const w of words) { const tryRow = row ? row + ' ' + w : w; if (O.measureText(tryRow).width > 1380) { rows.push(row); row = w; } else row = tryRow; }
+  rows.push(row);
+  const bw = Math.min(1560, Math.max(...rows.map(r => O.measureText(r).width)) + 140), bh = 40 + rows.length * 52, bx = W / 2 - bw / 2, by = H - 70 - bh + slide;
+  const g = O.createLinearGradient(0, by, 0, by + bh); g.addColorStop(0, 'rgba(38,16,8,0.93)'); g.addColorStop(1, 'rgba(22,9,4,0.93)');
+  O.fillStyle = g; O.fillRect(bx, by, bw, bh);
+  O.strokeStyle = '#c99a42'; O.lineWidth = 2; O.strokeRect(bx + 8, by + 8, bw - 16, bh - 16);
+  O.fillStyle = '#a3311b'; O.fillRect(bx + bw - 44, by + bh / 2 - 12, 24, 24); O.fillStyle = '#e8c9a0'; O.fillRect(bx + bw - 38, by + bh / 2 - 6, 12, 12);
+  O.fillStyle = '#f3e3c3';
+  rows.forEach((r, i) => O.fillText(r, W / 2, by + 20 + 26 + i * 52));
+  O.restore();
+}
+
+// ── scene 1: Madurai, the rival kings, the vow ───────────────────────────────
+function scene1(t) {
+  const GY = 900;
+  // scenery
+  T.save(); T.filter = 'none';
+  for (let x = -200; x < 4200; x += 1270) drawPiece(T, SC.ground, x, GY);
+  drawPiece(T, SC.gopuram, 560, GY + 6);
+  drawPiece(T, SC.palm, 180, GY + 10, -.03);
+  drawPiece(T, SC.palm, 1600, GY + 10, .04, -1, 1);
+  T.globalAlpha = .6; drawPiece(T, SC.hills, 1750, GY + 20, 0, .8, .7); T.globalAlpha = 1;
+  drawPiece(T, SC.fort, 3150, GY + 6);
+  T.restore();
+  // title plaque
+  const tp = pressLift(t, TL.title_on, TL.title_off);
+  if (tp) { T.save(); T.filter = `blur(${tp.blur}px)`; T.globalAlpha = tp.alpha; const y = 440 - (tp.lift || 0) * 220;
+    drawPiece(T, TITLE, 960 + (noise1(t, 77) - .5) * 4, y, (noise1(t * .8, 78) - .5) * .02, tp.s, tp.s);
+    T.filter = 'blur(1.5px)'; T.strokeStyle = 'rgba(60,35,20,.6)'; T.lineWidth = 3; T.beginPath(); T.moveTo(760, y + 150 * tp.s); T.lineTo(700, 1300); T.moveTo(1160, y + 150 * tp.s); T.lineTo(1220, 1300); T.stroke(); T.restore(); }
+
+  // the boy king
+  const enter = win(t, TL.boy_steps[0] - .2, TL.boy_steps[4] + .2);
+  let bx = lerp(700, 1100, ease(enter));
+  const walking = t > TL.boy_steps[0] - .2 && t < TL.boy_steps[4] + .2;
+  const vowK = win(t, TL.sword_up - .3, TL.sword_up + .4);
+  const pose = { x: bx, y: GY, s: 1.0, dir: 1, seed: 3, walk: walking ? (t - 5) * 5.6 : 0, walkAmp: walking ? 1 : 0,
+    head: t > TL.head_turn && t < 16.2 ? -0.12 + Math.sin((t - TL.head_turn) * 2) * .03 : 0.02,
+    tilt: -.02, aF: lerp(-0.25, -2.7, ease(vowK)), eF: lerp(-0.7, -0.15, ease(vowK)), aB: .3, eB: -.4, heldAng: lerp(0.2, 0, vowK) };
+  if (t > TL.flare) { pose.tremor = 1.8; pose.head = -0.16; pose.tilt = -0.06; }
+  const press = pressLift(t, TL.boy_steps[0] - .4, 999, .6);
+  if (t > TL.boy_steps[0] - .4) {
+    if (press && press.blur > 0) { pose.blur = press.blur; pose.alpha = press.alpha; }
+    rods(T, pose.x, pose.y, pose.s, 1, t, 2, 5);
+    drawFigure(T, BOY, pose, t);
+  }
+
+  // the rival kings (right), laughing
+  const lk = t > TL.laugh[0] && t < TL.laugh[1] ? Math.sin((t - TL.laugh[0]) * 20) : 0;
+  const kingIn = pressLift(t, 15.6, 999, .7);
+  if (kingIn) {
+    const kp = (x, sd, F) => ({ x, y: GY, s: 1.32, dir: -1, seed: sd, tilt: .08 + lk * .05 * (t < TL.laugh[1] ? 1 : 0) - (t > TL.laugh[0] && t < TL.laugh[1] ? .1 : 0),
+      head: lk * .08 - (t > TL.laugh[0] && t < TL.laugh[1] ? .2 : 0), aF: -0.9, eF: -0.9, aB: .2, eB: -.2, blur: kingIn.blur, alpha: kingIn.alpha, heldAng: .1 });
+    rods(T, 2740, GY, 1.32, -1, t, 2, 8); rods(T, 3180, GY, 1.32, -1, t, 2, 9);
+    drawFigure(T, CHERA, kp(2740, 6, CHERA), t);
+    drawFigure(T, CHOLA, kp(3180, 7, CHOLA), t);
+  }
+  // their banners, one per beat; then seven join
+  const joinK = win(t, TL.join - .3, TL.join + .5);
+  const bannerAt = (at, x, flag, seed, sc = 1) => {
+    const p = pressLift(t, at, 999, .45); if (!p) return;
+    const jx = lerp(x, 2950 + (x - 2950) * .55, ease(joinK));
+    drawBanner(T, flag, jx, GY - 10, t, { blur: p.blur, alpha: p.alpha, s: p.s * sc * 1.05, seed, dir: -1 });
+  };
+  bannerAt(TL.banner_chera, 2600, FLAGS.bow, 1, 1.15);
+  bannerAt(TL.banner_chola, 3320, FLAGS.tiger, 2, 1.15);
+  const cxs = [2420, 2510, 3420, 3510, 3600];
+  TL.banner_chiefs.forEach((at, i) => bannerAt(at, cxs[i], FLAGS.chiefs[i], 3 + i, .8));
+  // lamps
+  const L1 = lampLevel(t, TL.lamps_on[0], 99, TL.flare), L2 = lampLevel(t, TL.lamps_on[1]), L3 = lampLevel(t, TL.lamps_on[2]);
+  const vowDim = t > TL.whip_back + .6 && t < TL.flare ? .45 : 1; // the vow begins in a dimmer theatre
+  return [
+    { x: 700, y: 380, v: L1 * vowDim, seed: 1 }, { x: 1300, y: 300, v: L2 * vowDim, seed: 2 }, { x: 330, y: 420, v: L3 * vowDim, seed: 3 },
+    { x: 2700, y: 350, v: lampLevel(t, 16.0) * .9, seed: 4 }, { x: 3250, y: 300, v: lampLevel(t, 16.4) * .9 + pulse(t, TL.join, .8) * .5, seed: 5 },
+    { x: 1150, y: 200, v: lampLevel(t, TL.flare) * 1.1, seed: 6 },
+  ];
+}
+
+// the puppets are lifted off before the end card
+function rest(t) { const k = clamp((t - TL.lamps_away) / .9); return { s: 1 + k * .4, blur: k * 22, alpha: 1 - k, lift: k }; }
+// ── scene 2: the march, Thalaiyalanganam, the victory ────────────────────────
+function scene2(t) {
+  const GY = 905;
+  T.save();
+  T.globalAlpha = .55; drawPiece(T, SC.hills, -200, GY + 30, 0, 1.1, .8); drawPiece(T, SC.hills, 1900, GY + 30, 0, -1.3, .75); T.globalAlpha = 1;
+  for (let x = -300; x < 4000; x += 1270) drawPiece(T, SC.groundB, x, GY);
+  drawPiece(T, SC.palm, 120, GY + 10, -.05, .8, .8); drawPiece(T, SC.palm, 3600, GY + 10, .05, -.9, .9);
+  T.restore();
+  // place plaque on a rod
+  const pp = pressLift(t, TL.place_plaque, 39.6);
+  if (pp) { T.save(); T.filter = `blur(${pp.blur}px)`; T.globalAlpha = pp.alpha; const px = 1500, y = 330 - (pp.lift || 0) * 200;
+    drawPiece(T, PLACE, px + (noise1(t, 51) - .5) * 4, y, (noise1(t * .8, 52) - .5) * .02, pp.s, pp.s);
+    T.filter = 'blur(1.5px)'; T.strokeStyle = 'rgba(60,35,20,.6)'; T.lineWidth = 3; T.beginPath(); T.moveTo(px, y + 90); T.lineTo(px - 60, 1300); T.stroke(); T.restore(); }
+
+  // the Pandya army marches right
+  const mk = t < TL.clash ? (t - TL.march) : (TL.clash - TL.march) + Math.min(.6, t - TL.clash) * .8;
+  const adv = Math.max(0, mk) * 260, armyX = 520 + adv - (t < TL.march ? 0 : 0);
+  const marching = t > TL.march && t < TL.clash + .4;
+  const fight = t > TL.clash && t < TL.victory;
+  const strike = fight ? Math.max(0, Math.sin((t - TL.clash) * 7)) : 0;
+  // soldiers behind the king
+  for (let i = 0; i < 4; i++) {
+    const x = armyX - 260 - i * 170, sd = 20 + i;
+    drawFigure(T, SOLDIER, { x, y: GY, s: .8, dir: 1, seed: sd, walk: marching ? t * 5.4 + i : 0, walkAmp: marching ? 1 : 0,
+      aF: -1.2 + (fight ? strike * -.5 : 0), eF: -1.0, heldAng: .35 - (fight ? strike * .6 : 0), aB: .3, eB: -.3, tilt: fight ? .06 : 0 }, t);
+  }
+  if (t < TL.victory + .9) drawBanner(T, FLAGS.fish, armyX - 150, GY - 10, t, { s: 1.05, seed: 9 });
+  // the boy king leads
+  let kx = armyX;
+  const vict = win(t, TL.victory, TL.victory + 1.2);
+  if (t > TL.victory) kx = lerp(armyX, 2620, ease(vict));
+  const rb = rest(t);
+  if (rb.alpha > 0) rods(T, kx, GY, .95, 1, t, 2, 12);
+  drawFigure(T, BOY, { x: kx, y: GY, s: .95, dir: 1, seed: 3, walk: marching ? t * 5.6 : 0, walkAmp: marching ? 1 : 0,
+    aF: fight ? -2.2 + strike * 1.6 : (t > TL.victory ? lerp(-1.1, -2.8, ease(win(t, TL.victory + .8, TL.victory + 1.6))) : -1.1),
+    eF: fight ? -0.4 + strike * .3 : -0.4, heldAng: fight ? -strike * .4 : 0, aB: .35, eB: -.5,
+    tilt: fight ? .05 + strike * .06 : -.03, head: t > TL.victory + 1.6 ? -0.14 : 0, tremor: fight ? 1.8 : 1, blur: rb.blur, alpha: rb.alpha, ...(rb.lift ? { y: GY - rb.lift * 300, s: .95 * rb.s } : {}) }, t);
+  if (t > TL.victory + .9) { const r = rest(t); drawBanner(T, FLAGS.fish, kx - 70, GY - 10 - r.lift * 300, t, { dir: -1, s: lerp(1.05, 1.3, win(t, TL.victory + .9, TL.victory + 1.8)) * r.s, seed: 10, blur: r.blur, alpha: r.alpha }); }
+
+  // the alliance: seven banners and foot soldiers, knocked away one group at a time
+  const foes = [
+    { x: 2500, flag: FLAGS.chiefs[0], g: 0 }, { x: 2620, flag: FLAGS.chiefs[1], g: 0 }, { x: 2760, flag: FLAGS.bow, g: 1, big: 1 },
+    { x: 2900, flag: FLAGS.chiefs[2], g: 1 }, { x: 3040, flag: FLAGS.tiger, g: 2, big: 1 }, { x: 3180, flag: FLAGS.chiefs[3], g: 2 }, { x: 3300, flag: FLAGS.chiefs[4], g: 2 }];
+  const fireOn = t > TL.falls[0] - .2 && t < TL.victory + 2.5;
+  foes.forEach((f, i) => {
+    const fallAt = TL.falls[f.g] + i * .05;
+    const k = t < fallAt ? 0 : (t - fallAt) / 1.0;
+    if (k >= 1) return;
+    const rot = k > 0 ? easeOut(k) * (1.2 + i * .1) : (fight ? Math.sin(t * 8 + i) * .04 : 0);
+    const flyX = k * 260, flyY = -k * k * 420, blur = k * 22, alpha = 1 - k, s = 1 + k * .5;
+    drawBanner(T, f.flag, f.x + flyX, GY - 10 + flyY, t, { s: (f.big ? 1.12 : .85) * s, seed: 30 + i, dir: -1, rot, blur, alpha });
+    if (i % 2 === 0) drawFigure(T, FOE, { x: f.x + 40 + flyX * 1.2, y: GY + flyY, s: .85 * s, dir: -1, seed: 40 + i,
+      aF: -1.3 + (fight ? Math.max(0, Math.sin((t - TL.clash) * 6 + i)) * -.6 : 0), eF: -1, heldAng: .3, aB: .3, eB: -.3,
+      tilt: k > 0 ? -easeOut(k) * 1.4 : .05, blur, alpha, tremor: 1.6 }, t);
+  });
+  // fire pieces swapped at 12 fps (the battle burns)
+  if (fireOn) {
+    const fi = Math.floor(t * 12) % 3, fa = clamp((t - TL.falls[0] + .2) / .3) * clamp((TL.victory + 2.5 - t) / .8);
+    T.save(); T.globalAlpha = fa;
+    drawPiece(T, SC.fire[fi], 2350, GY + 10, 0, .9, .8 + .05 * Math.sin(t * 9)); drawPiece(T, SC.fire[(fi + 1) % 3], 3450, GY + 10, 0, -1, .9);
+    T.restore();
+  }
+  // end card plaque
+  const ep = pressLift(t, TL.end_card, TL.end_card_off, .6, 1.0);
+  if (ep) { T.save(); T.filter = `blur(${ep.blur}px)`; T.globalAlpha = ep.alpha; const y = 360 - (ep.lift || 0) * 200;
+    drawPiece(T, END, 2700 + (noise1(t, 61) - .5) * 4, y + 140, (noise1(t * .8, 62) - .5) * .02, ep.s * .9, ep.s * .9); T.restore(); }
+
+  // lamps: carried away one by one at the end
+  const away = (i) => TL.lamps_away + i * .9;
+  const lv = (on, i, base = 1) => lampLevel(t, on, away(i)) * base;
+  return [
+    { x: 900, y: 380, v: lv(TL.flash, 0), seed: 11 }, { x: 1700, y: 300, v: lv(TL.flash, 1), seed: 12 }, { x: 2350, y: 340, v: lv(TL.flash, 2) + pulse(t, TL.clash, .8) * .9, seed: 13 },
+    { x: 3050, y: 300, v: lv(TL.flash, 3) + TL.falls.reduce((a, f) => a + pulse(t, f, .5) * .5, 0) + pulse(t, TL.final_hit, 1) * .9, seed: 14 },
+    { x: 2700, y: 200, v: lampLevel(t, TL.victory + 1.6, TL.dark - .9) * 1.0, seed: 15 },
+  ];
+}
+
+// ── boot ─────────────────────────────────────────────────────────────────────
+buildScenery(); buildCast();
+window.setLines = ls => { LINES = ls; };
+window.drawFrame = drawFrame;
+window.ready = true;
+</script></body></html>
