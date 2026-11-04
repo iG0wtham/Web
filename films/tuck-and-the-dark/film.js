@@ -42,7 +42,7 @@ const FLIES = Array.from({ length: 26 }, (_, i) => { const r = mulberry(500 + i)
 
 // ── Tuck: side view facing right; feet at (x, y) ─────────────────────────────
 // o: s (scale), dir, walk (step index), hide (0–1), peek (0–1, eyes in the gap), look (head tilt: + up), wave (0–1), sleep (0–1), worry, smile
-function tuck(C, o) {
+export function tuck(C, o) {
   const s = o.s ?? 1, d = o.dir ?? 1, X = (x) => o.x + x * s * d, Y = (y) => o.y + y * s;
   const P = (pts) => pts.map(([x, y]) => [X(x), Y(y)]);
   const sd = 7000, hide = o.hide ?? 0, sleep = o.sleep ?? 0;
@@ -107,7 +107,7 @@ function tuck(C, o) {
 }
 
 // ── Firefly ──────────────────────────────────────────────────────────────────
-function firefly(C, L, x, y, s, t, o = {}) {
+export function firefly(C, L, x, y, s, t, o = {}) {
   const sd = 7400 + (o.seed ?? 0), flap = Math.floor(t * 12) % 2;
   const glow = o.glow ?? 1;
   // glow: white wax halo then a lemon core (drawn after the wash: it shines on the night)

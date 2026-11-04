@@ -6,6 +6,7 @@ const comp = makeComp(document.getElementById('gl'));
 await Promise.all(['400 40px "Patrick Hand"', '700 40px Gaegu'].map(f => document.fonts.load(f)));
 const M = await import('./film.js');
 window.DUR = M.DUR; window.EV = M.EV; window.SUBS = M.SUBS;
-if (Q.get('test') === 'model') window.render = t => { BOIL.step = Math.floor(t * 12); M.sheet(comp, t); };
+if (Q.get('art')) { const A = await import('./art.js'); window.render = t => { BOIL.step = 0; A[Q.get('art')](comp, t); }; }
+else if (Q.get('test') === 'model') window.render = t => { BOIL.step = Math.floor(t * 12); M.sheet(comp, t); };
 else window.render = t => { BOIL.step = Math.floor(t * 12 + 1e-6); M.frame(comp, t); };
 window.READY = true;
