@@ -12,7 +12,7 @@ const LINES = linesMeta.map((l, i) => ({ start: TL.lines[i], dur: l.dur, sub: l.
 
 (async () => {
   const [mode, outp, ...rest] = process.argv.slice(2);
-  const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--disable-gpu-vsync'] });
+  const browser = await chromium.launch({ args: (process.env.NOGPU ? ['--disable-gpu', '--disable-accelerated-2d-canvas'] : ['--use-gl=angle', '--use-angle=swiftshader', '--disable-gpu-vsync']) });
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
   await page.addInitScript(tl => { window.TL = tl; }, TL);
   page.on('pageerror', e => { console.error('PAGE ERROR', e.message); process.exit(1); });
