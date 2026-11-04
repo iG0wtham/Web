@@ -2,7 +2,8 @@
 import { makeComp } from './gl.js';
 import { BOIL } from './crayon.js';
 const Q = new URLSearchParams(location.search);
-const comp = makeComp(document.getElementById('gl'));
+const cv = document.getElementById('gl'); cv.width = innerWidth; cv.height = innerHeight;
+const comp = makeComp(cv);
 await Promise.all(['400 40px "Patrick Hand"', '700 40px Gaegu'].map(f => document.fonts.load(f)));
 const M = await import('./film.js');
 window.DUR = M.DUR; window.EV = M.EV; window.SUBS = M.SUBS;

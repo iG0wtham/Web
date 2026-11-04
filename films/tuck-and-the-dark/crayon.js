@@ -2,7 +2,7 @@
 // World coords → screen coords via CAM; line widths are in screen pixels (each frame is a freshly "redrawn" picture, so stroke width does not scale much with the camera).
 // BOIL.step = floor(t*12): the jitter seed changes every 2 frames (at 24fps) = line boil.
 import { clamp, lerp, hash, vnoise } from '/core/lib.js';
-export const W = 1920, H = 1080;
+export const W = window.innerWidth || 1920, H = window.innerHeight || 1080;   // frame size follows the render tool's --size
 export const CAM = { x: 960, y: 540, s: 1 };
 export const BOIL = { step: 0, amp: 1 };
 export const WMUL = { k: 1 };        // global line-width multiplier (adjustable for big close-ups on the model sheet)

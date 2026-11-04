@@ -1,6 +1,6 @@
 // WebGL2 compositor: paper → crayon layers (adhesion by paper-tooth threshold) → watercolour layer (crayon resist) → final composite (paper-tooth emboss, vignette)
 // Each crayon layer is a Canvas2D: RGB = crayon colour, A = pressure. The shader decides whether wax sticks by "pressure > depth of the paper-tooth pit".
-export const W = 1920, H = 1080;
+export const W = window.innerWidth || 1920, H = window.innerHeight || 1080;   // frame size follows the render tool's --size
 
 const VS = `#version 300 es
 in vec2 p; out vec2 uv;

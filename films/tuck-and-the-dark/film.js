@@ -170,12 +170,12 @@ function nightLight(L, it, t) {
 function drawWorld(BGf, BGl, t, drawK) {
   const dk = drawK;   // opening draw-on progress for the background (0–1)
   // pond water
-  const water = [[1250, GY + 40], [1500, GY + 20], [2600, GY + 30], [3900, GY + 20], [4700, GY + 30], [4700, 1720], [1250, 1720]];
+  const water = [[1250, GY + 40], [1500, GY + 20], [2600, GY + 30], [3900, GY + 20], [4700, GY + 30], [4700, 2600], [1250, 2600]];
   fill(BGf, water, { col: K.sky, p: 0.62, gap: 11, w: 12, seed: 8001, ang: 0.08, draw: pr(dk, 0.2, 0.7), boil: 0 });
   line(BGl, smooth([[1250, GY + 40], [1500, GY + 20], [2600, GY + 30], [3900, GY + 20], [4700, GY + 30]], 8, false), { w: 6, seed: 8002, draw: pr(dk, 0.1, 0.5), boil: 0.6 });
   for (let i = 0; i < 9; i++) { const wx = 1500 + i * 360, wy = GY + 120 + (i % 3) * 110; line(BGl, [[wx, wy], [wx + 40, wy - 12], [wx + 80, wy]], { w: 4, col: K.ink, p: 0.6, seed: 8010 + i, draw: pr(dk, 0.5, 0.9), boil: 0.6 }); }
   // grass shore
-  fill(BGf, [[X0, GY - 6], [1300, GY - 4], [1260, 1720], [X0, 1720]], { col: K.leaf, p: 0.7, gap: 11, w: 12, seed: 8020, draw: pr(dk, 0.2, 0.8), boil: 0 });
+  fill(BGf, [[X0, GY - 6], [1300, GY - 4], [1260, 2600], [X0, 2600]], { col: K.leaf, p: 0.7, gap: 11, w: 12, seed: 8020, draw: pr(dk, 0.2, 0.8), boil: 0 });
   fill(BGf, [[1300, GY - 6], [4700, GY - 6], [4700, GY + 26], [1300, GY + 30]], { col: K.leaf, p: 0.75, gap: 8, w: 10, seed: 8021, ang: 0.05, draw: pr(dk, 0.3, 0.9), boil: 0 });
   line(BGl, [[X0, GY - 4], [X1, GY - 4]], { w: 6, seed: 8022, draw: pr(dk, 0, 0.4), boil: 0.6 });
   for (let i = 0; i < 60; i++) { const gx = X0 + 40 + i * 95 + 30 * hash(i); line(BGl, [[gx, GY - 2], [gx + 8, GY - 30 - 14 * hash(i + 3)]], { w: 4.5, col: K.reed, seed: 8030 + i, draw: pr(dk, 0.4, 0.9), boil: 0.6 }); }
@@ -249,6 +249,14 @@ const camT = track([
   [40.0, [1660, 1030, 1.2]], [41.6, [1700, 1030, 1.15]], [44.0, [2050, 1010, 1.0]], [46.0, [2420, 1000, 1.0]], [48.0, [2820, 1030, 1.0]],
   [50.2, [3150, 980, 0.92]], [53.6, [3500, 960, 0.85]], [55.0, [3560, 1060, 1.15]], [60, [3560, 1090, 1.8]],
 ]);
+const camV = track([
+  [0, [1180, 1080, 2.6]], [0.6, [1180, 1080, 2.6]], [4.4, [1230, 950, 1.0]], [5.3, [1230, 950, 1.05]],
+  [10.8, [1600, 950, 1.1]], [11.6, [1830, 820, 0.9]], [13.2, [1880, 800, 0.9]], [16.2, [1900, 820, 0.9]], [17.2, [1700, 900, 0.75]],
+  [23.8, [1700, 900, 0.75]], [25.0, [1600, 1080, 1.5]], [31.0, [1620, 1090, 2.2]], [31.8, [1660, 1040, 1.6]], [38.0, [1670, 1040, 1.6]],
+  [40.0, [1700, 1030, 1.35]], [41.6, [1720, 1030, 1.25]], [44.0, [2200, 1000, 1.0]], [46.0, [2550, 1000, 1.0]], [48.0, [2900, 1020, 1.0]],
+  [50.2, [3250, 980, 0.95]], [53.6, [3560, 960, 0.9]], [55.0, [3560, 1060, 1.25]], [60, [3560, 1090, 1.9]],
+]);
+const VERT = H > W;
 // the dark: one wash band sweeping left → right across the whole page
 const WASH = { t0: 17.4, t1: 23.2 };
 function drawWash(LW, t) {
@@ -290,7 +298,7 @@ ev(48.1, 'croak'); ev(55.0, 'curl');
 // ── layers ───────────────────────────────────────────────────────────────────
 const BG = { f: layer(), l: layer() }, SUNG = group(), TK = group(), FF = group(), FX = layer(), WL = layer(), SUBK = layer(), SUBT = layer();
 export function frame(comp, t) {
-  [CAM.x, CAM.y, CAM.s] = camT(t);
+  [CAM.x, CAM.y, CAM.s] = VERT ? camV(t) : camT(t);
   BOIL.amp = (t > 24 && t < 31) || t > 56 ? 0.5 : 1;
   [BG.f, BG.l, FX, WL, SUBK, SUBT].forEach(clear); clearGroup(SUNG); clearGroup(TK); clearGroup(FF);
   // opening: the page draws itself around Tuck
@@ -338,12 +346,14 @@ export function frame(comp, t) {
 export function subTo(SUBK, SUBT, t) {
   const S = SUBS.find(s => t >= s.t0 && t < s.t1); if (!S) return;
   const rv = pr(t, S.t0, S.t0 + 0.35);
-  const g = SUBK.g; g.save(); g.font = '400 56px "Patrick Hand"'; const tw = g.measureText(S.text).width; g.restore();
-  const cx = 960, cy = 1000, hw = tw / 2 + 50, hh = 46;
+  const g = SUBK.g; g.save(); g.font = '400 56px "Patrick Hand"';
+  let rows = [S.text]; if (g.measureText(S.text).width > W - 160) { const w = S.text.split(' '); let best = 1, bd = 1e9; for (let k = 1; k < w.length; k++) { const d = Math.abs(g.measureText(w.slice(0, k).join(' ')).width - g.measureText(w.slice(k).join(' ')).width); if (d < bd) { bd = d; best = k; } } rows = [w.slice(0, best).join(' '), w.slice(best).join(' ')]; }
+  const tw = Math.max(...rows.map(r => g.measureText(r).width)); g.restore();
+  const cx = W / 2, cy = VERT ? H * 0.74 : H - 80, hw = tw / 2 + 50, hh = 46 + (rows.length - 1) * 32;
   g.save(); g.fillStyle = '#000'; g.beginPath();
   for (let i = 0; i <= 60; i++) { const a = i / 60 * Math.PI * 2; const px = Math.cos(a), py = Math.sin(a); const sq = Math.pow(Math.abs(px), 0.3) * Math.sign(px); const n = 1 + 0.06 * Math.sin(a * 7 + 1.3) + 0.03 * Math.sin(a * 17); const X = cx + sq * hw * n, Y = cy + py * hh * n; i ? g.lineTo(X, Y) : g.moveTo(X, Y); }
   g.closePath(); g.fill(); g.restore();
-  text(SUBT, S.text, cx, cy + 18, { size: 56, col: K.ink, reveal: rv, seed: 11 + S.t0 * 3, p: 1, stroke: 1.2 });
+  rows.forEach((r, i) => text(SUBT, r, cx, cy + 18 + (i - (rows.length - 1) / 2) * 64, { size: 56, col: K.ink, reveal: rv, seed: 11 + S.t0 * 3 + i, p: 1, stroke: 1.2 }));
 }
 // model sheet (?test=model)
 export function sheet(comp, t) {
