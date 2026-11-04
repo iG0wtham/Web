@@ -1,0 +1,15 @@
+[
+ {"id": "n01", "text": "This is Tuck.", "voice": "af_sarah", "speed": 0.84},
+ {"id": "n02", "text": "Tuck is a little turtle.", "voice": "af_sarah", "speed": 0.84},
+ {"id": "n03", "text": "Tuck loves sunny days.", "voice": "af_sarah", "speed": 0.86},
+ {"id": "n04", "text": "Bye-bye, Sun!", "asr": "Bye bye, sun!", "voice": "af_sarah", "speed": 0.86},
+ {"id": "n05", "text": "The sun is going to bed.", "voice": "af_sarah", "speed": 0.84},
+ {"id": "n06", "text": "Here comes the dark.", "voice": "af_sarah", "speed": 0.8},
+ {"id": "n07", "text": "Tuck is scared. He hides in his shell.", "voice": "af_sarah", "speed": 0.82},
+ {"id": "n08", "text": "Inside, it is very dark.", "voice": "af_sarah", "speed": 0.78},
+ {"id": "n09", "text": "Tap, tap! Who is that?", "voice": "af_sarah", "speed": 0.86},
+ {"id": "n10", "text": "It is Firefly. \"Come with me,\" she says.", "asr": "It is Firefly. Come with me, she says.", "voice": "af_sarah", "speed": 0.84},
+ {"id": "n11", "text": "Tuck takes one little step.", "voice": "af_sarah", "speed": 0.82},
+ {"id": "n12", "text": "The dark is full of little lights!", "voice": "af_sarah", "speed": 0.84},
+ {"id": "n13", "text": "Goodnight, little turtle.", "voice": "af_sarah", "speed": 0.78}
+]
