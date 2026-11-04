@@ -80,9 +80,9 @@ export function banner(comp, t) {
   hills(BG.f, BG.l); nightWash(WL);
   stars(STAR.f, 70, 777, [30, 30, 1890, 760], 10, 22, [360, 330, 1560, 720]);
   // safe area (visible on every device) ≈ x 380–1540, y 381–698: moon + title inside it
-  moon(CH, 470, 560, 112);
-  text(TX, 'Crayon Bedtime Tales', 1075, 540, { size: 104, font: 'Gaegu', weight: 700, col: K.lemon, p: 1, stroke: 3, seed: 31 });
-  text(TX, 'gentle crayon stories for little ones', 1075, 625, { size: 50, col: K.white, p: 1, seed: 32 });
+  moon(CH, 545, 560, 82);
+  text(TX, 'Crayon Bedtime Tales', 1030, 535, { size: 86, font: 'Gaegu', weight: 700, col: K.lemon, p: 1, stroke: 3, seed: 31 });
+  text(TX, 'gentle crayon stories for little ones', 1030, 598, { size: 40, col: K.white, p: 1, seed: 32 });
   // outside the safe area (TV / desktop): crayons, a tiny sleeping turtle
   crayonStick(CH, 80, 1010, -0.25, K.red, 6200); crayonStick(CH, 200, 1060, -0.12, K.sky, 6210); crayonStick(CH, 1500, 1050, 0.12, K.lemon, 6220); crayonStick(CH, 1640, 1000, 0.3, K.violet, 6230);
   tuck(CH, { x: 1700, y: 860, s: 0.55, sleep: 1, smile: 1, dir: -1 });
