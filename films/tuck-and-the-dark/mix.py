@@ -180,7 +180,7 @@ lift = np.interp(np.arange(N) / SR, [0, 42.5, 43.5, 49.4, 50.1, 60], [1, 1, 1.5,
 sil = np.interp(np.arange(N) / SR, [0, 28.4, 28.6, 31.3, 31.4, 60], [1, 1, 0, 0, 1, 1])   # bar 10: silence under the narrator
 mix = mus * (duck * lift * sil)[:, None] + fol * fduck[:, None] + amb + vo
 mix[-int(0.02 * SR):] *= np.linspace(1, 0, int(0.02 * SR))[:, None]
-mix = limit(mix, .9)
+mix = limit(mix * 0.85, .8)
 os.makedirs(os.path.join(HERE, 'out'), exist_ok=True)
 sf.write(os.path.join(HERE, 'out', 'mix.wav'), mix.astype(np.float32), SR)
 for nm, a, b in [('day', 5, 11), ('dark', 17, 24), ('silence', 28.6, 31.3), ('walk', 44, 50)]:
