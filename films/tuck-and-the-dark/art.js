@@ -3,7 +3,7 @@
 import { layer, clear, line, fill, dab, text, handCircle, ellipse, smooth, CAM, BOIL, W, H } from './crayon.js';
 import { group, clearGroup, part, tube } from './rig.js';
 import { mulberry, hash } from '/core/lib.js';
-import { tuck } from './film.js';
+import { tuck, firefly } from './film.js';
 
 const K = { ink: '#2d3263', leaf: '#5fae4a', olive: '#8a8f3a', sand: '#e9c27a', lemon: '#f6d43c', orange: '#ee8a3a',
   sky: '#7fb6df', pink: '#ef8fa6', reed: '#3f8a52', brown: '#7a4b31', white: '#fbfaf4', red: '#d4483c', violet: '#6a5aa6' };
@@ -96,5 +96,24 @@ export function dp(comp, t) {
   stars(STAR.f, 26, 4242, [480, 60, 1440, 1020], 14, 28, [640, 240, 1260, 860]);
   moon(CH, 1010, 590, 300, 5100);
   crayonStick(CH, 760, 930, -0.35, K.red, 6300, 260);
+  compose(comp);
+}
+
+// YouTube thumbnail (?art=thumb): Tuck hiding, eyes peeking, Firefly glowing; big readable crayon words
+function bigText(L, str, x, y, size, col, seed) {
+  for (const [dx, dy] of [[-5, 0], [5, 0], [0, -5], [0, 5], [4, 6]]) text(L, str, x + dx, y + dy, { size, font: 'Gaegu', weight: 700, col: K.ink, p: 1, stroke: 6, seed, boil: 0 });
+  text(L, str, x, y, { size, font: 'Gaegu', weight: 700, col, p: 1, stroke: 3, seed, boil: 0 });
+}
+export function thumb(comp, t) {
+  [CAM.x, CAM.y, CAM.s] = [960, 540, 1]; BOIL.amp = 0.4;
+  [BG.f, BG.l, TX, WL].forEach(clear); clearGroup(CH); clearGroup(STAR);
+  const g = smooth([[-100, 930], [500, 900], [1000, 920], [1500, 890], [2050, 910]], 10, false);
+  fill(BG.f, [...g, [2050, 1200], [-100, 1200]], { col: K.leaf, p: 0.8, gap: 11, w: 12, seed: 7100, boil: 0 }); line(BG.l, g, { w: 8, seed: 7101, boil: .4 });
+  nightWash(WL);
+  stars(STAR.f, 40, 8080, [40, 40, 1880, 560], 12, 26, [40, 40, 1300, 420]);
+  tuck(CH, { x: 640, y: 1068, s: 2.6, hide: 1, peek: 1, smile: 1 });
+  firefly(CH, TX, 1240, 700, 2.4, 0.3, { seed: 3 });
+  bigText(TX, 'Scared of', 640, 200, 150, K.white, 41);
+  bigText(TX, 'the DARK?', 690, 360, 190, K.lemon, 42);
   compose(comp);
 }
