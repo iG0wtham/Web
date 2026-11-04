@@ -1,0 +1,51 @@
+1
+00:00:01,500 --> 00:00:03,050
+This is Tuck.
+
+2
+00:00:03,200 --> 00:00:05,556
+Tuck is a little turtle.
+
+3
+00:00:06,500 --> 00:00:08,709
+Tuck loves sunny days.
+
+4
+00:00:11,500 --> 00:00:13,355
+Bye-bye, Sun!
+
+5
+00:00:13,800 --> 00:00:16,167
+The sun is going to bed.
+
+6
+00:00:19,500 --> 00:00:21,812
+Here comes the dark.
+
+7
+00:00:22,100 --> 00:00:25,361
+Tuck is scared. He hides in his shell.
+
+8
+00:00:28,400 --> 00:00:31,327
+Inside, it is very dark.
+
+9
+00:00:31,500 --> 00:00:33,858
+Tap, tap! Who is that?
+
+10
+00:00:34,500 --> 00:00:37,945
+It is Firefly. "Come with me," she says.
+
+11
+00:00:39,800 --> 00:00:42,264
+Tuck takes one little step.
+
+12
+00:00:50,300 --> 00:00:53,077
+The dark is full of little lights!
+
+13
+00:00:55,100 --> 00:00:57,628
+Goodnight, little turtle.

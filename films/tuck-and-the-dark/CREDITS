@@ -1,0 +1,10 @@
+Tuck and the Dark — credits for third-party material in the film
+
+Engine code (gl.js, crayon.js, rig.js), production tools (core/) and the Crayon Picture Book style prompt:
+  Lemo-Opuscar by Lemomo — https://github.com/lemomo-ai/lemo-opuscar — code MIT; style prompts CC BY 4.0
+Narration voice: Kokoro-82M (af_sarah) via kokoro-onnx — Apache 2.0
+Samples (CC0): Versilian Community Sample Library (Versilian Studios) — recorder, glockenspiel, woodblock, shaker
+Modelled plucked string ("ukulele" lilt): Lemo-Opuscar core/audio/pluck.py — MIT
+Fonts: Patrick Hand (Patrick Wagesreiter), Gaegu (JIKJI SOFT) — SIL Open Font License 1.1 (fonts/*_OFL.txt)
+
+Story, characters, drawings, score and sound design were made for this film.

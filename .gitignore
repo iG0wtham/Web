@@ -1,3 +1,5 @@
 films/*/audio/mix_raw.wav
 node_modules/
 films/tuck-and-the-dark/fonts/gaegu_unused_Regular.json
+films/*/out/
+films/*/stills/
